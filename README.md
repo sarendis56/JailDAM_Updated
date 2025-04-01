@@ -1,4 +1,4 @@
-# <img src="asset/shield.png" width="50">JailDAM: Jailbreak Detection with Adaptive Memory for Vision-Language Model
+## <img src="asset/shield.png" width="50">JailDAM: Jailbreak Detection with Adaptive Memory for Vision-Language Model
 Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Li Li, Ziyi Wang,
 [Chaowei Xiao†](https://xiaocw11.github.io/), [Yue Zhao†](https://viterbi-web.usc.edu/~yzhao010/)
 
@@ -8,26 +8,26 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Li Li, Ziyi Wang,
 
 **<font color='red'>❗️Content Warning: This repo contains examples of harmful language.</font>**
 
-# TODO List:
+## TODO List:
 - [x] Create repo
 - [] Release paper on Arxiv
 - [] Release code
 - [] Release pre-trained detector
 
-# 💡 Abstract
+## 💡 Abstract
 Multimodal large language models (MLLMs) excel in vision-language tasks but also pose significant risks of generating harmful content, particularly through jailbreak attacks. Jailbreak attacks refer to intentional manipulations that bypass safety mechanisms in models, leading to the generation of inappropriate or unsafe content. Detecting such attacks is critical to ensuring the responsible deployment of MLLMs. Existing jailbreak detection methods face three primary challenges: (1) Many rely on model hidden states or gradients, limiting their applicability to white-box models, where
 the internal workings of the model are accessible; (2) They involve high computational overhead from uncertainty-based analysis, which limits real-time detection, and (3) They require fully labeled harmful datasets, which are often scarce in real-world settings. To address these issues, we introduce
 a test-time adaptive framework called JAILDAM . Our method leverages a memory-based approach guided by policy-driven unsafe knowledge representations, eliminating the need for explicit exposure to harmful data. By dynamically updating unsafe knowledge during test-time, our framework
 improves generalization to unseen jailbreak strategies while maintaining efficiency. Experiments on multiple VLM jailbreak benchmarks demonstrate that JAILDAM delivers state-of-the-art performance in harmful content detection, improving both accuracy and speed.
 
 
-# ⚡ Detection Framework
+## ⚡ Detection Framework
 JAILDAM overview. (A) Training: We encode safe text and images with CLIP, computing attention scores against a policy-driven unsafe memory bank. An autoencoder learns to reconstruct these features, linking benign inputs to unsafe concepts without explicit harmful data. (B) Inference: For each new input, we compute attention scores and measure the autoencoder’s reconstruction error; high error indicates potential harm. If similarity to the memory bank is low, JAILDAM updates the least-used concept with a residual representation, adapting to new attacks over time.
 <div style="text-align: center;">
 <img src="asset/training_inference_stage.jpg"/>
 </div>
 
-# ⚡ Defense Framework
+## 🚀 Defense Framework
 Based on our attack detector, **JAILDAM**, we construct an end-to-end attack defense framework, denoted as **JAILDAM-D** (see Figure 3). This framework implements a two-stage defense approach:
 
 1. **Attack Detection**: The incoming instruction \( S \) is first analyzed by **JAILDAM**, which evaluates whether the input contains potential attack patterns or harmful content.  
@@ -38,30 +38,30 @@ Based on our attack detector, **JAILDAM**, we construct an end-to-end attack def
 <img src="asset/shield_pipe.jpg"/>
 </div>
 
-# 🏆 Main Results
-## Jailbreak Detection
+## 🏆 Main Results
+### Jailbreak Detection
 <div style="text-align: center;">
 <img src="asset/jailbreak_detection.png"/>
 </div>
 
-## Jailbreak Defense
+### Jailbreak Defense
 <div style="text-align: center;">
 <img src="asset/f1-score_detection.jpg"/>
 </div>
 
-# 👍 Acknowledgement
+## 👍 Acknowledgement
 We use following amazing datasets/benchmarks as data source:
 - [MM-SafetyBench](https://arxiv.org/abs/2311.17600)
 - [FigStep](https://arxiv.org/abs/2311.05608)
 - [JailbreakV-28k](https://arxiv.org/abs/2404.03027)
 - [MM-Vet](https://arxiv.org/abs/2308.02490)
 
-# ❌ Disclaimers
+## ❌ Disclaimers
 This dataset includes offensive content that some may find disturbing. It is intended solely for educational and research use.
 
-# Contact
+## Contact
 - Yi Nian: yn2336@columbia.edu
 - Shenzhe Zhu: cho.zhu@mail.utoronto.ca
 
-# 📖 BibTeX:
+## 📖 BibTeX:
 TODO
