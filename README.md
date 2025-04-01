@@ -9,7 +9,7 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Li Li, Ziyi Wang,
 **<font color='red'>❗️Content Warning: This repo contains examples of harmful language.</font>**
 
 ## TODO List:
-- [x] Create repo 2025/04/01
+- [x] 2025/04/01 Create repo 
 - [ ] Release paper on Arxiv
 - [ ] Release code
 - [ ] Release pre-trained detector
