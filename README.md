@@ -10,7 +10,7 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Li Li, Ziyi Wang,
 
 ## TODO List:
 - [x] 2025/04/01 Create repo 
-- [ ] Release paper on Arxiv
+- [x] 2025/04/09 Release paper on Arxiv
 - [ ] Release code
 - [ ] Release pre-trained detector
 
