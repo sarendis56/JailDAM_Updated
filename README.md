@@ -4,14 +4,15 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Li Li, Ziyi Wang,
 
 (*Contribute equally, †Corresponding author)
 
-[**📝 arxiv**](https://arxiv.org/abs/2504.03770)
+[**🤗 Dataset**](https://huggingface.co/datasets/Chouoftears/JailDAM-data)[**📝 arxiv**](https://arxiv.org/abs/2504.03770)
 
 **<font color='red'>❗️Content Warning: This repo contains examples of harmful language.</font>**
 
 ## TODO List:
 - [x] 2025/04/01 Create repo 
 - [x] 2025/04/09 Release paper on Arxiv
-- [ ] Release code
+- [x] 2025/05/25 Release data
+- [ ] Release Code
 - [ ] Release pre-trained detector
 
 ## 💡 Abstract
