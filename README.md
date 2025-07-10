@@ -1,5 +1,5 @@
 # <img src="asset/shield.png" width="50">JailDAM: Jailbreak Detection with Adaptive Memory for Vision-Language Model
-Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Li Li, Ziyi Wang,
+Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Shawn Li, Ziyi Wang,
 [Chaowei Xiao](https://xiaocw11.github.io/), [Yue Zhao†](https://viterbi-web.usc.edu/~yzhao010/)
 
 (*Contribute equally, †Corresponding author)
