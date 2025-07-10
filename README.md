@@ -6,6 +6,8 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Li Li, Ziyi Wang,
 
 [**🤗 Dataset**](https://huggingface.co/datasets/Chouoftears/JailDAM-data) [**📝 arxiv**](https://arxiv.org/abs/2504.03770)
 
+🥹We are currently quite busy and may not be able to organize and release the code very soon. If you are in a hurry to use it, please feel free to check out the code from  [Rough Code](https://anonymous.4open.science/r/Jail-DAM-A525)
+
 **<font color='red'>❗️Content Warning: This repo contains examples of harmful language.</font>**
 ## NEWS!!:
 - 2025/07/08 Our paper was accepted by COLM 2025!!!
