@@ -67,4 +67,11 @@ This dataset includes offensive content that some may find disturbing. It is int
 - Shenzhe Zhu: cho.zhu@mail.utoronto.ca
 
 ## 📖 BibTeX:
-TODO
+```
+@article{nian2025jaildam,
+  title={JailDAM: Jailbreak Detection with Adaptive Memory for Vision-Language Model},
+  author={Nian, Yi and Zhu, Shenzhe and Qin, Yuehan and Li, Li and Wang, Ziyi and Xiao, Chaowei and Zhao, Yue},
+  journal={arXiv preprint arXiv:2504.03770},
+  year={2025}
+}
+```
