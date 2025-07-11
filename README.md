@@ -8,7 +8,7 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Shawn Li, Ziyi Wang,
 
 **<font color='red'>❗️Content Warning: This repo contains examples of harmful language.</font>**
 ## NEWS!!:
-- 2025/07/10 🥹We are currently quite busy and may not be able to organize and release the code very soon. If you are in a hurry to use it, please feel free to check out the code from  [Rough Code](https://anonymous.4open.science/r/Jail-DAM-A525)
+- 2025/07/10 🥹We are currently quite busy and may not be able to organize and release the code very soon. If you are in a hurry to use it, please feel free to check out the code from  [Rough Code](https://anonymous.4open.science/r/Jail-DAM-A525) Notice: The file preview is not valid for this rough code, please download the whole repository from anonymous github
 - 2025/07/08 Our paper was accepted by COLM 2025!!!
 ## TODO List:
 - [x] 2025/04/01 Create repo 
