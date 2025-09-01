@@ -15,7 +15,7 @@ Notice: The file preview is not valid for this rough code, please download the w
 - [x] 2025/04/01 Create repo 
 - [x] 2025/04/09 Release paper on Arxiv
 - [x] 2025/05/25 Release data
-- [] Release Code
+- [ ] Release Code
 
 ## 💡 Abstract
 Multimodal large language models (MLLMs) excel in vision-language tasks but also pose significant risks of generating harmful content, particularly through jailbreak attacks. Jailbreak attacks refer to intentional manipulations that bypass safety mechanisms in models, leading to the generation of inappropriate or unsafe content. Detecting such attacks is critical to ensuring the responsible deployment of MLLMs. Existing jailbreak detection methods face three primary challenges: (1) Many rely on model hidden states or gradients, limiting their applicability to white-box models, where
