@@ -122,7 +122,7 @@ def main(unsafe_dataset,safe_dataset,concept_numbers):
 #     processor = AutoProcessor.from_pretrained("zer0int/LongCLIP-GmP-ViT-L-14")
 #     clip_model = AutoModelForZeroShotImageClassification.from_pretrained("zer0int/LongCLIP-GmP-ViT-L-14").to(device) 
     # Define 1300 concepts
-    label_path = "/home/ec2-user/llmood/main_vlm_jailbreak/VLM-Jailbreak-detection-uncertainty-main/concept.json"  # Multiple labels
+    label_path = "concept.json"  # Multiple labels
     with open(label_path, "r") as json_file:
         concept_dict = json.load(json_file)
 
