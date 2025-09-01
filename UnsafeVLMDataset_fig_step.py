@@ -11,7 +11,6 @@ class UnsafeVLMDataset_fig_step(Dataset):
         self.processor = processor
         self.base_path = base_path  # Base directory for unsafe dataset
         self.embedding_base_path = embedding_base_path  # Path for hidden state embeddings
-        self.image_base_path = "/home/ec2-user/llmood/main_vlm_jailbreak/VLM-Jailbreak-detection-uncertainty-main/data/mm_bench/imgs/"
         self.data = []  # Store (image_path, question_text, embedding, category) tuples
         
         # Get all JSON files dynamically and create category mapping
@@ -113,8 +112,8 @@ def main(model,processor):
     # processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
 
     # **Define paths**
-    base_path = "/home/ec2-user/.cache/huggingface/hub/datasets--Chouoftears--01-asdewwasd/snapshots/e153e23220589e6d358af47a0b9ab0ddc31bed6f/all_data/unsafe/fig_step"
-    embedding_base_path = "/home/ec2-user/.cache/huggingface/hub/datasets--Chouoftears--01-asdewwasd/snapshots/e153e23220589e6d358af47a0b9ab0ddc31bed6f/unsafe_input/weights"
+    base_path = "/data/fig_step"
+    embedding_base_path = "/data/mmsafety/unsafe_input/weights"
 
     # **Create Unsafe Dataset and DataLoader**
     unsafe_dataset = UnsafeVLMDataset_fig_step(base_path, embedding_base_path, processor, device)

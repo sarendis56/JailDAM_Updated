@@ -11,7 +11,7 @@ class UnsafeVLMDataset_MMsafety(Dataset):
         self.processor = processor
         self.base_path = base_path  # Base directory for unsafe dataset
         self.embedding_base_path = embedding_base_path  # Path for hidden state embeddings
-        self.image_base_path = "/home/ec2-user/llmood/main_vlm_jailbreak/VLM-Jailbreak-detection-uncertainty-main/data/mm_bench/imgs/"
+        self.image_base_path = "/data/mmsafety/imgs"
         self.data = []  # Store (image_path, question_text, embedding, category) tuples
 
         # Create a category-to-index mapping (01 → 1, 02 → 2, etc.)
@@ -116,8 +116,8 @@ def main(model,processor):
     # Load CLIP model and processor
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # Define correct paths
-    base_path = "/home/ec2-user/.cache/huggingface/hub/datasets--Chouoftears--01-asdewwasd/snapshots/4273b19880477a5295816720c28460c1edb65002"
-    embedding_base_path = "/home/ec2-user/.cache/huggingface/hub/datasets--Chouoftears--01-asdewwasd/snapshots/0c736bd44c3a26166ab24a86f53c7f86f36aec06/unsafe_input/weights"
+    base_path = "/"
+    embedding_base_path = "/data/mmsafety/unsafe_input/weights"
 
     categories = [
         "01-Illegal_Activity",

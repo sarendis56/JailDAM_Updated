@@ -80,8 +80,8 @@ def main(model,processor):
     # Load CLIP model and processor
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # Define correct paths
-    image_base_dir = "/home/ec2-user/.cache/huggingface/hub/datasets--Chouoftears--01-asdewwasd/snapshots/56b463792e92d377db19a7e78180af04cb7d1bb4/safe/mm-vet/images"
-    json_path = "/home/ec2-user/.cache/huggingface/hub/datasets--Chouoftears--01-asdewwasd/snapshots/56b463792e92d377db19a7e78180af04cb7d1bb4/safe/mm-vet/sample.json"
+    image_base_dir = "/data/mm-vet/images"
+    json_path = "/data/mm-vet/sample.json"
     # Create dataset and dataloader
     safe_dataset_mmvet = VLMDataset_mmvet(json_path, image_base_dir, processor, device)
     safe_dataloader_mmvet = DataLoader(safe_dataset_mmvet, batch_size=8, shuffle=True, collate_fn=collate_fn)
