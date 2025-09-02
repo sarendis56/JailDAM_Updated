@@ -4,7 +4,7 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Shawn Li, Ziyi Wang,
 
 (*Contribute equally, †Corresponding author)
 
-[**🤗 Dataset**](https://huggingface.co/datasets/Chouoftears/JailDAM-data) [**📝 arxiv**](https://arxiv.org/abs/2504.03770)
+[**📝 arxiv**](https://arxiv.org/abs/2504.03770)
 
 **<font color='red'>❗️Content Warning: This repo contains examples of harmful language.</font>**
 ## NEWS!!:
