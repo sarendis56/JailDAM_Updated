@@ -8,14 +8,23 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Shawn Li, Ziyi Wang,
 
 **<font color='red'>❗️Content Warning: This repo contains examples of harmful language.</font>**
 ## NEWS!!:
-- 2025/07/10 🥹We are currently quite busy and may not be able to organize and release the code very soon. If you are in a hurry to use it, please feel free to check out the code from  [Rough Code](https://anonymous.4open.science/r/Jail-DAM-A525)\
-Notice: The file preview is not valid for this rough code, please download the whole repository from anonymous github
+- 2025/09/03 We just released our code, thank you for your patient
 - 2025/07/08 Our paper was accepted by COLM 2025!!!
 ## TODO List:
 - [x] 2025/04/01 Create repo 
 - [x] 2025/04/09 Release paper on Arxiv
 - [x] 2025/05/25 Release data
-- [ ] Release Code
+- [x] 2025/09/03 Release Code
+
+## Quick Start
+
+1. **Download the dataset** from [Google Drive](https://drive.google.com/drive/folders/16Ge5BKIbj6bbD0fJOPYT9i8o5lr7HNgc).  
+2. **Place the data** in the project root under a folder named `./data`.  
+3. **Set up the environment**:  
+   ```bash
+   conda env create -f environment.yml
+   conda activate llava
+4. **Run the demo** by opening `demo.ipynb`
 
 ## 💡 Abstract
 Multimodal large language models (MLLMs) excel in vision-language tasks but also pose significant risks of generating harmful content, particularly through jailbreak attacks. Jailbreak attacks refer to intentional manipulations that bypass safety mechanisms in models, leading to the generation of inappropriate or unsafe content. Detecting such attacks is critical to ensuring the responsible deployment of MLLMs. Existing jailbreak detection methods face three primary challenges: (1) Many rely on model hidden states or gradients, limiting their applicability to white-box models, where
