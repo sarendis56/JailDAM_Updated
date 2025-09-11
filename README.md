@@ -16,6 +16,10 @@ Yi Nian*, Shenzhe Zhu*, Yuehan Qin, Shawn Li, Ziyi Wang,
 - [x] 2025/05/25 Release data
 - [x] 2025/09/03 Release Code
 
+<figure style="margin: 0 auto; text-align: center; width: fit-content;">
+  <img src="asset/JailDam.jpg" style="width: 600px;">
+</figure>
+
 ## Quick Start
 
 1. **Download the dataset** from [Google Drive](https://drive.google.com/drive/folders/16Ge5BKIbj6bbD0fJOPYT9i8o5lr7HNgc).  
