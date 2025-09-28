@@ -39,8 +39,12 @@ def compute_concept_similarities(dataloader, model, concept_embeddings,processor
 
     # Ensure concept embeddings are on the correct device
     concept_embeddings = concept_embeddings.to(device)
+    
+    total_batches = len(dataloader)
+    print(f"Computing concept similarities for {total_batches} batches...")
+    print("-" * 50)
 
-    for batch in dataloader:
+    for batch_idx, batch in enumerate(dataloader):
         torch.cuda.empty_cache()  # Free up memory
         gc.collect()  # Run garbage collection
 
@@ -77,7 +81,13 @@ def compute_concept_similarities(dataloader, model, concept_embeddings,processor
                 # Append batch results
                 all_text_sims.append(text_sim)
                 all_image_sims.append(image_sim)
+        
+        # Progress reporting
+        if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == total_batches:
+            progress = ((batch_idx + 1) / total_batches) * 100
+            print(f"  Processed {batch_idx + 1}/{total_batches} batches ({progress:.1f}%)")
 
+    print("Concept similarity computation completed!")
     return torch.cat(all_text_sims), torch.cat(all_image_sims), all_decoded_texts  
 
 
@@ -115,54 +125,84 @@ def collate_fn(batch):
 
 
 def main(unsafe_dataset,safe_dataset,concept_numbers):
+    print("=" * 60)
+    print("GENERATING DATALOADER WITH CONCEPT SIMILARITIES")
+    print("=" * 60)
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    
+    print("Loading CLIP model...")
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+    print("CLIP model loaded successfully!")
 
 #     processor = AutoProcessor.from_pretrained("zer0int/LongCLIP-GmP-ViT-L-14")
 #     clip_model = AutoModelForZeroShotImageClassification.from_pretrained("zer0int/LongCLIP-GmP-ViT-L-14").to(device) 
-    # Define 1300 concepts
+    # Define concepts
+    print(f"Loading {concept_numbers} concepts from concept.json...")
     label_path = "concept.json"  # Multiple labels
     with open(label_path, "r") as json_file:
         concept_dict = json.load(json_file)
 
     # Preprocess labels only once
+    print("Processing concept labels...")
     merged_list = [item.strip("[]") for key, value in concept_dict.items() for item in value.split(", ")]
     sampled_strings = random.sample(merged_list, concept_numbers)
     merged_list = [random.choice(sampled_strings) for _ in range(concept_numbers)]
 
+    print("Computing concept embeddings...")
     text_inputs1 = processor(text=merged_list, return_tensors="pt", padding=True).to(device)
     text_embeddings1 = clip_model.get_text_features(**text_inputs1)
     concept_embeddings = F.normalize(text_embeddings1, p=2, dim=1)  # Normalize once (1300,768)
+    print(f"Concept embeddings computed: {concept_embeddings.shape}")
 
     # Define the number of samples to use from the unsafe dataset
     unsafe_sample_size = len(unsafe_dataset) // 2  # Use half (4000 if unsafe has 8000)
     safe_sample_size = len(safe_dataset)  # Keep all safe data
+    
+    print(f"Dataset sizes:")
+    print(f"  Unsafe dataset: {len(unsafe_dataset)} samples")
+    print(f"  Safe dataset: {len(safe_dataset)} samples")
+    print(f"  Using {unsafe_sample_size} unsafe samples (50%)")
 
     # Randomly select a subset of the unsafe dataset
+    print("Creating dataset subset...")
     unsafe_subset, _ = random_split(unsafe_dataset, [unsafe_sample_size, len(unsafe_dataset) - unsafe_sample_size])
 
     # Combine the datasets (using half of the unsafe dataset)
     combined_dataset = ConcatDataset([safe_dataset, unsafe_subset])
+    print(f"Combined dataset created with {len(combined_dataset)} total samples")
 
     # Create a new dataloader
+    print("Creating dataloader...")
     combined_dataloader = DataLoader(combined_dataset, batch_size=8, shuffle=False, collate_fn=collate_fn)
 
     # Move concept embeddings to CPU temporarily if needed
     concept_embeddings = concept_embeddings.to("cpu")
 
     # Compute similarities for the whole dataset
+    print("\nStarting concept similarity computation...")
     safe_text_sims, safe_image_sims, all_decoded_texts = compute_concept_similarities(combined_dataloader, clip_model, concept_embeddings,processor)
 
     # Move back to GPU if training on GPU
+    print("Moving similarity tensors to GPU...")
     safe_text_sims = safe_text_sims.to(device)
     safe_image_sims = safe_image_sims.to(device)
 
     # Extract labels from the original dataloader
+    print("Extracting category labels...")
     category_labels = torch.cat([batch["category"] for batch in combined_dataloader])  # (batch_size,)
 
     # Create dataset
+    print("Creating final concept dataset...")
     concept_dataset = ConceptDataset(safe_text_sims, safe_image_sims, category_labels)
     
+    print("=" * 60)
+    print("DATALOADER GENERATION COMPLETED!")
+    print(f"Final dataset size: {len(concept_dataset)} samples")
+    print(f"Text similarities shape: {safe_text_sims.shape}")
+    print(f"Image similarities shape: {safe_image_sims.shape}")
+    print("=" * 60)
     
     return combined_dataset, concept_embeddings

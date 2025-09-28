@@ -45,7 +45,11 @@ class VLMDataset_mmvet(Dataset):
         image_path, safe_instruction, embedding, category = self.data[idx]
 
         # Load and preprocess image
-        image = Image.open(image_path).convert("RGB").resize((224, 224))
+        image = Image.open(image_path)
+        # Convert palette images with transparency to RGBA first, then to RGB
+        if image.mode in ('P', 'LA'):
+            image = image.convert('RGBA')
+        image = image.convert("RGB").resize((224, 224))
 
         return image, safe_instruction, embedding, torch.tensor(category, dtype=torch.int64)
 
@@ -80,8 +84,8 @@ def main(model,processor):
     # Load CLIP model and processor
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # Define correct paths
-    image_base_dir = "/data/mm-vet/images"
-    json_path = "/data/mm-vet/sample.json"
+    image_base_dir = "./data/mm-vet/images"
+    json_path = "./data/mm-vet/sample.json"
     # Create dataset and dataloader
     safe_dataset_mmvet = VLMDataset_mmvet(json_path, image_base_dir, processor, device)
     safe_dataloader_mmvet = DataLoader(safe_dataset_mmvet, batch_size=8, shuffle=True, collate_fn=collate_fn)

@@ -11,7 +11,7 @@ class UnsafeVLMDataset_MMsafety(Dataset):
         self.processor = processor
         self.base_path = base_path  # Base directory for unsafe dataset
         self.embedding_base_path = embedding_base_path  # Path for hidden state embeddings
-        self.image_base_path = "/data/mmsafety/imgs"
+        self.image_base_path = "./data/mmsafety/imgs"
         self.data = []  # Store (image_path, question_text, embedding, category) tuples
 
         # Create a category-to-index mapping (01 → 1, 02 → 2, etc.)
@@ -78,9 +78,19 @@ class UnsafeVLMDataset_MMsafety(Dataset):
         image_path, question_text, embedding, category = self.data[idx]
 
         # Load and preprocess image
-        image = Image.open(image_path).convert("RGB").resize((224, 224))
+        image = Image.open(image_path)
+        # Convert palette images with transparency to RGBA first, then to RGB
+        if image.mode in ('P', 'LA'):
+            image = image.convert('RGBA')
+        image = image.convert("RGB").resize((224, 224))
 
-        return image, question_text, torch.tensor(embedding, dtype=torch.float32), torch.tensor(category, dtype=torch.int64)
+        # Convert embedding to tensor properly to avoid warnings
+        if isinstance(embedding, torch.Tensor):
+            embedding_tensor = embedding.clone().detach().to(dtype=torch.float32)
+        else:
+            embedding_tensor = torch.tensor(embedding, dtype=torch.float32)
+        
+        return image, question_text, embedding_tensor, torch.tensor(category, dtype=torch.int64)
 
 # Custom `collate_fn` for dynamic padding and adding `safe=0`
 def collate_fn(batch):
@@ -116,8 +126,8 @@ def main(model,processor):
     # Load CLIP model and processor
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # Define correct paths
-    base_path = "/"
-    embedding_base_path = "/data/mmsafety/unsafe_input/weights"
+    base_path = "./data/mmsafety"
+    embedding_base_path = "./data/mmsafety/unsafe_input/weights"
 
     categories = [
         "01-Illegal_Activity",
