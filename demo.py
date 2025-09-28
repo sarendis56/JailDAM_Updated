@@ -24,6 +24,7 @@ from UnsafeVLMDataset_28k import main as main_unsafe_28k
 from UnsafeVLMDataset_MMsafety import main as main_unsafe_mmsafety
 from UnsafeVLMDataset_fig_step import main as main_unsafe_fig_step
 from VLMDataset_mmvet import main as main_safe_mmvet
+from VLMDataset_medical_vqa import main as main_safe_medical_vqa
 from generate_dataloader import main as generate_dataloader
 from memory_network import MemoryNetwork
 
@@ -31,22 +32,32 @@ from memory_network import MemoryNetwork
 # -------------------------
 # Dataset loader
 # -------------------------
-def load_selected_datasets(unsafe_name, safe_name, model, processor):
+def load_selected_datasets(unsafe_name, safe_name, model, processor, test_name=None, max_test_samples=1000):
     unsafe_datasets = {
         "UnsafeVLMDataset_28k": main_unsafe_28k,
         "UnsafeVLMDataset_MMsafety": main_unsafe_mmsafety,
         "UnsafeVLMDataset_fig_step": main_unsafe_fig_step,
     }
     safe_datasets = {
-        "VLMDataset_mmvet": main_safe_mmvet
+        "VLMDataset_mmvet": main_safe_mmvet,
+        "VLMDataset_medical_vqa": main_safe_medical_vqa
     }
     if unsafe_name not in unsafe_datasets or safe_name not in safe_datasets:
         raise ValueError(
             f"Invalid dataset names. Choose from: {list(unsafe_datasets.keys())} (unsafe) and {list(safe_datasets.keys())} (safe)"
         )
+    
     unsafe_dataset, unsafe_dataloader = unsafe_datasets[unsafe_name](model, processor)
     safe_dataset, safe_dataloader = safe_datasets[safe_name](model, processor)
-    return unsafe_dataset, unsafe_dataloader, safe_dataset, safe_dataloader
+    
+    # Load test dataset if specified
+    test_dataset, test_dataloader = None, None
+    if test_name and test_name in safe_datasets:
+        print(f"Loading test dataset: {test_name}")
+        test_dataset, test_dataloader = safe_datasets[test_name](model, processor, max_samples=max_test_samples)
+        print(f"Loaded {test_name} with {len(test_dataloader.dataset)} samples for testing.")
+    
+    return unsafe_dataset, unsafe_dataloader, safe_dataset, safe_dataloader, test_dataset, test_dataloader
 
 
 # -------------------------
@@ -221,14 +232,20 @@ if __name__ == "__main__":
     ds_processor = AutoProcessor.from_pretrained("openai/clip-vit-large-patch14")
     ds_model = AutoModelForZeroShotImageClassification.from_pretrained("openai/clip-vit-large-patch14")
 
+    # Load datasets
     unsafe_dataset_name = "UnsafeVLMDataset_MMsafety"
     safe_dataset_name = "VLMDataset_mmvet"
+    test_benign_name = "VLMDataset_medical_vqa"  # VQA-RAD for unseen benign testing
+    max_test_samples = 1000  # Balanced test set size
 
-    unsafe_dataset, unsafe_dataloader, safe_dataset, safe_dataloader = load_selected_datasets(
-        unsafe_dataset_name, safe_dataset_name, ds_model, ds_processor
+    unsafe_dataset, unsafe_dataloader, safe_dataset, safe_dataloader, test_benign_dataset, test_benign_dataloader = load_selected_datasets(
+        unsafe_dataset_name, safe_dataset_name, ds_model, ds_processor, test_benign_name, max_test_samples
     )
+    
     print(f"Loaded {unsafe_dataset_name} with {len(unsafe_dataloader.dataset)} samples.")
     print(f"Loaded {safe_dataset_name} with {len(safe_dataloader.dataset)} samples.")
+    if test_benign_dataset and test_benign_dataloader:
+        print(f"Loaded {test_benign_name} with {len(test_benign_dataloader.dataset)} samples for unseen benign testing.")
 
     samples_per_category = 100
     num_categories = 13
@@ -281,6 +298,12 @@ if __name__ == "__main__":
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
         ood_dataloader = DataLoader(unsafe_only, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
+        print(f"Training samples: {len(train_dataset)}")
+        print(f"Validation samples: {len(val_dataset)}")
+        print(f"Unsafe test samples: {len(unsafe_only)}")
+        if test_benign_dataloader:
+            print(f"Unseen benign test samples: {len(test_benign_dataloader.dataset)}")
+
         num_epochs, learning_rate, _, update_threshold, top_k_update = 5, 0.001, 8, 10, 50
 
         # Autoencoder input: num_categories_train * samples_per_category * 2
@@ -298,7 +321,8 @@ if __name__ == "__main__":
         print("=" * 60)
         print(f"Training samples: {len(train_dataset)}")
         print(f"Validation samples: {len(val_dataset)}")
-        print(f"OOD samples: {len(unsafe_only)}")
+        print(f"Test samples: {len(test_benign_dataloader.dataset) if test_benign_dataloader else len(unsafe_only)}")
+        print(f"Test dataset: {test_benign_name if test_benign_dataloader else 'Unsafe Data (OOD)'}")
         print(f"Number of epochs: {num_epochs}")
         print(f"Batch size: {batch_size}")
         print(f"Learning rate: {learning_rate}")
@@ -357,7 +381,7 @@ if __name__ == "__main__":
 
             if top_k_concepts:
                 concept_optimizer.zero_grad()
-                concept_loss = 0.0
+                concept_loss = torch.tensor(0.0, device=device, requires_grad=True)
 
                 for idx in top_k_concepts:
                     if concept_match_accumulator[idx]:
@@ -368,7 +392,7 @@ if __name__ == "__main__":
                         concept_vec = concept_embeddings[idx].unsqueeze(0)
                         target = torch.ones(1, device=device)
                         loss_val = similarity_loss_fn(concept_vec, mean_vec.unsqueeze(0), target)
-                        concept_loss += 5.0 * loss_val * (1 + var_vec.mean())
+                        concept_loss = concept_loss + 5.0 * loss_val * (1 + var_vec.mean())
 
                 (concept_loss / len(top_k_concepts)).backward()
                 concept_optimizer.step()
@@ -387,23 +411,36 @@ if __name__ == "__main__":
         print("Only top-K most frequently used unsafe concept embeddings were updated.")
         print("=" * 60)
 
-    # Evaluate
-    print("\nStarting Evaluation Phase...")
-    print("-" * 40)
-    combined_dataloaders = [val_dataloader, ood_dataloader]
-    results = evaluate_autoencoder_combined(combined_dataloaders, concept_embeddings, autoencoder, device, concept_frequency_total)
-
-    print("\n" + "=" * 60)
+    # Evaluate on multiple test sets
+    print("\n" + "="*60)
     print("EVALUATION RESULTS")
-    print("=" * 60)
-    print(f"AUROC (Area Under ROC Curve): {results['AUROC']:.4f}")
-    print(f"AUPR (Area Under Precision-Recall): {results['AUPR']:.4f}")
-    print(f"Best Detection Threshold: {results['Best Threshold']:.4f}")
-    print(f"F1 Score: {results['F1 Score']:.4f}")
-    print(f"Precision: {results['Precision']:.4f}")
-    print(f"Recall: {results['Recall']:.4f}")
-    print(f"Average Processing Time per Input: {results['Average Processing Time per Input']:.6f} seconds")
-    print("=" * 60)
+    print("="*60)
+    
+    # Test 1: Validation + Unsafe (original approach)
+    print("\n1. Validation + Unsafe (Original Approach):")
+    combined_dataloaders_original = [val_dataloader, ood_dataloader]
+    results_original = evaluate_autoencoder_combined(combined_dataloaders_original, concept_embeddings, autoencoder, device, concept_frequency_total)
+    print(f"   AUROC: {results_original['AUROC']:.4f}, AUPR: {results_original['AUPR']:.4f}")
+    print(f"   F1 Score: {results_original['F1 Score']:.4f}, Precision: {results_original['Precision']:.4f}, Recall: {results_original['Recall']:.4f}")
+    
+    # Test 2: Validation + Unseen Benign (VQA-RAD) - Distribution Shift Test
+    if test_benign_dataloader:
+        print("\n2. Validation + Unseen Benign (VQA-RAD) - Distribution Shift Test:")
+        combined_dataloaders_shift = [val_dataloader, test_benign_dataloader]
+        results_shift = evaluate_autoencoder_combined(combined_dataloaders_shift, concept_embeddings, autoencoder, device, concept_frequency_total)
+        print(f"   AUROC: {results_shift['AUROC']:.4f}, AUPR: {results_shift['AUPR']:.4f}")
+        print(f"   F1 Score: {results_shift['F1 Score']:.4f}, Precision: {results_shift['Precision']:.4f}, Recall: {results_shift['Recall']:.4f}")
+        
+        # Test 3: All test sets combined
+        print("\n3. All Test Sets Combined (Validation + Unsafe + Unseen Benign):")
+        combined_dataloaders_all = [val_dataloader, ood_dataloader, test_benign_dataloader]
+        results_all = evaluate_autoencoder_combined(combined_dataloaders_all, concept_embeddings, autoencoder, device, concept_frequency_total)
+        print(f"   AUROC: {results_all['AUROC']:.4f}, AUPR: {results_all['AUPR']:.4f}")
+        print(f"   F1 Score: {results_all['F1 Score']:.4f}, Precision: {results_all['Precision']:.4f}, Recall: {results_all['Recall']:.4f}")
+    else:
+        print("\n2. VQA-RAD dataset not available, skipping distribution shift test.")
+    
+    print(f"\nAverage Processing Time per Input: {results_original['Average Processing Time per Input']:.6f} seconds")
 
 
 # In[ ]:
