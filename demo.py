@@ -155,6 +155,9 @@ def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_p
     dataset_names = np.asarray(dataset_names)
 
     plt.style.use('default')
+    # Double font sizes
+    base_fs = plt.rcParams.get('font.size', 10)
+    fs = base_fs * 2
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     
     # Get unique datasets
@@ -174,10 +177,11 @@ def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_p
         ax1.hist(scores, bins=30, alpha=0.7, label=f"{dataset}", 
                 color=colors[i % len(colors)], density=True)
     
-    ax1.set_xlabel('Reconstruction Error Score')
-    ax1.set_ylabel('Density')
-    ax1.set_title('Score Distribution Comparison Across Datasets')
-    ax1.legend()
+    ax1.set_xlabel('Reconstruction Error Score', fontsize=fs)
+    ax1.set_ylabel('Density', fontsize=fs)
+    ax1.set_title('Score Distribution Comparison Across Datasets', fontsize=fs)
+    ax1.legend(fontsize=fs)
+    ax1.tick_params(axis='both', labelsize=fs)
     ax1.grid(True, alpha=0.3)
     
     # Plot 2: Box plot comparison
@@ -202,10 +206,11 @@ def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_p
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
     
-    ax2.set_ylabel('Reconstruction Error Score')
-    ax2.set_title('Score Distribution Box Plot')
+    ax2.set_ylabel('Reconstruction Error Score', fontsize=fs)
+    ax2.set_title('Score Distribution Box Plot', fontsize=fs)
     ax2.grid(True, alpha=0.3)
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=45, fontsize=fs)
+    ax2.tick_params(axis='both', labelsize=fs)
     
     plt.tight_layout()
     plt.savefig(save_path, format='pdf', bbox_inches='tight', dpi=300)
@@ -501,6 +506,10 @@ if __name__ == "__main__":
         print("Only top-K most frequently used unsafe concept embeddings were updated.")
         print("=" * 60)
 
+    # Snapshot baseline states for evaluation experiments
+    baseline_concept_embeddings = concept_embeddings.detach().clone()
+    baseline_concept_frequency_total = {k: v for k, v in concept_frequency_total.items()}
+
     # Evaluate on multiple test sets
     print("\n" + "="*80)
     print("EVALUATION RESULTS")
@@ -518,8 +527,17 @@ if __name__ == "__main__":
         description="Baseline experiment using the original JailDAM approach: train on safe data, test on safe validation + unsafe data"
     )
     
+    # Fresh copies for experiment 1 (allowing test-time adaptation within this experiment only)
+    concept_embeddings_exp1 = baseline_concept_embeddings.clone().to(device)
+    concept_frequency_total_exp1 = {k: v for k, v in baseline_concept_frequency_total.items()}
     combined_dataloaders_original = [val_dataloader, ood_dataloader]
-    results_original = evaluate_autoencoder_combined(combined_dataloaders_original, concept_embeddings, autoencoder, device, concept_frequency_total)
+    results_original = evaluate_autoencoder_combined(
+        combined_dataloaders_original,
+        concept_embeddings_exp1,
+        autoencoder,
+        device,
+        concept_frequency_total_exp1,
+    )
     print(f"\nResults:")
     print(f"   AUROC: {results_original['AUROC']:.4f}, AUPR: {results_original['AUPR']:.4f}")
     print(f"   F1 Score: {results_original['F1 Score']:.4f}, Precision: {results_original['Precision']:.4f}, Recall: {results_original['Recall']:.4f}")
@@ -536,6 +554,8 @@ if __name__ == "__main__":
     autoencoder.eval()
     with torch.no_grad():
         for dataset_name, dataloader, expected_label in datasets_info_original:
+            if len(dataloader.dataset) == 0:
+                continue
             for batch in dataloader:
                 pixel_values = batch["pixel_values"].to(device)
                 input_ids = batch["input_ids"].to(device)
@@ -544,8 +564,9 @@ if __name__ == "__main__":
                 _, _, text_embedding, image_embedding, _, _ = memory_network.forward(
                     text_input_ids=input_ids, text_attention_mask=attention_mask, image_pixel_values=pixel_values
                 )
-                sim_img = image_embedding @ concept_embeddings[:, :768].T
-                sim_txt = text_embedding @ concept_embeddings[:, 768:].T
+                # Use experiment-1 concept embeddings for consistency
+                sim_img = image_embedding @ concept_embeddings_exp1[:, :768].T
+                sim_txt = text_embedding @ concept_embeddings_exp1[:, 768:].T
                 attention_features = torch.cat((sim_txt, sim_img), dim=-1)
                 recon = autoencoder(attention_features)
                 recon_err = torch.mean((recon - attention_features) ** 2, dim=-1)
@@ -574,8 +595,17 @@ if __name__ == "__main__":
             description="Robustness test: train on safe data, test on safe validation + unsafe data + unseen benign data from different domain (medical) to test distribution shift robustness"
         )
         
+        # Fresh copies for experiment 2 (allowing test-time adaptation within this experiment only)
+        concept_embeddings_exp2 = baseline_concept_embeddings.clone().to(device)
+        concept_frequency_total_exp2 = {k: v for k, v in baseline_concept_frequency_total.items()}
         combined_dataloaders_all = [val_dataloader, ood_dataloader, test_benign_dataloader, text_only_dataloader]
-        results_all = evaluate_autoencoder_combined(combined_dataloaders_all, concept_embeddings, autoencoder, device, concept_frequency_total)
+        results_all = evaluate_autoencoder_combined(
+            combined_dataloaders_all,
+            concept_embeddings_exp2,
+            autoencoder,
+            device,
+            concept_frequency_total_exp2,
+        )
         print(f"\nResults:")
         print(f"   AUROC: {results_all['AUROC']:.4f}, AUPR: {results_all['AUPR']:.4f}")
         print(f"   F1 Score: {results_all['F1 Score']:.4f}, Precision: {results_all['Precision']:.4f}, Recall: {results_all['Recall']:.4f}")
@@ -613,8 +643,9 @@ if __name__ == "__main__":
                         text_input_ids=input_ids, text_attention_mask=attention_mask, image_pixel_values=pixel_values
                     )
                     
-                    sim_img = image_embedding @ concept_embeddings[:, :768].T
-                    sim_txt = text_embedding @ concept_embeddings[:, 768:].T
+                    # Use experiment-2 concept embeddings for consistency
+                    sim_img = image_embedding @ concept_embeddings_exp2[:, :768].T
+                    sim_txt = text_embedding @ concept_embeddings_exp2[:, 768:].T
                     attention_features = torch.cat((sim_txt, sim_img), dim=-1)
                     
                     recon = autoencoder(attention_features)
@@ -623,6 +654,16 @@ if __name__ == "__main__":
                     scores.extend(recon_err.cpu().numpy())
                     labels.extend([expected_label] * len(recon_err))
             
+            # Handle empty datasets gracefully
+            if len(scores) == 0:
+                print("  Samples: 0")
+                print("  Mean Score: n/a")
+                print("  Std Score: n/a")
+                print("  Min Score: n/a")
+                print("  Max Score: n/a")
+                print("  Median Score: n/a")
+                continue
+
             scores = np.array(scores)
             labels = np.array(labels)
             
@@ -648,10 +689,11 @@ if __name__ == "__main__":
                 bar = "█" * min(count, 50)  # Limit bar length
                 print(f"    [{bin_start:.2f}, {bin_end:.2f}): {count:3d} {bar}")
         
-        # Create PDF visualization
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        pdf_path = f"jaildam_score_distribution_{timestamp}.pdf"
-        create_score_distribution_plot(all_scores, all_labels, dataset_names, pdf_path)
+        # Create PDF visualization if we have any scores
+        if len(all_scores) > 0:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            pdf_path = f"jaildam_score_distribution_{timestamp}.pdf"
+            create_score_distribution_plot(all_scores, all_labels, dataset_names, pdf_path)
         
         # Overall confusion analysis
         print(f"\n" + "="*80)
@@ -677,6 +719,9 @@ if __name__ == "__main__":
         for dataset_name, dataloader, expected_label in datasets_info:
             dataset_scores = all_scores[dataset_names == dataset_name]
             dataset_labels = all_labels[dataset_names == dataset_name]
+            if len(dataset_scores) == 0:
+                print(f"\n{dataset_name}: no samples, skipping confusion analysis.")
+                continue
             dataset_preds = (dataset_scores >= best_threshold).astype(int)
             
             correct = (dataset_preds == dataset_labels).sum()

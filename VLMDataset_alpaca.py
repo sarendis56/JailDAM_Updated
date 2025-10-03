@@ -7,16 +7,34 @@ from datasets import load_dataset
 
 
 class VLMDatasetAlpaca(Dataset):
-    def __init__(self, processor, device="cuda", max_samples=1000, dataset_name="tatsu-lab/alpaca", split="train"):
+    def __init__(self, processor, device="cuda", max_samples=500, dataset_name="HuggingFaceH4/CodeAlpaca_20K", split="train"):
         self.device = device
         self.processor = processor
         self.data = []  # (dummy_image, instruction_text, embedding, category=0)
 
+        # Try to load flexible splits and fallbacks
+        ds = None
         try:
             ds = load_dataset(dataset_name, split=split)
         except Exception:
-            # Fallback small text dataset
-            ds = load_dataset("yahma/alpaca-cleaned", split=split)
+            try:
+                # Load without split and pick an available one
+                ds_all = load_dataset(dataset_name)
+                for candidate in ["train", "validation", "test", "train[:%d]" % max_samples]:
+                    if isinstance(ds_all, dict) and candidate in ds_all:
+                        ds = ds_all[candidate]
+                        break
+                if ds is None:
+                    # Pick the first available split
+                    if isinstance(ds_all, dict) and len(ds_all) > 0:
+                        ds = next(iter(ds_all.values()))
+            except Exception:
+                # Last resort: try streaming small take
+                try:
+                    ds_stream = load_dataset(dataset_name, split=split, streaming=True)
+                    ds = list(ds_stream.take(max_samples))
+                except Exception:
+                    ds = []
 
         if hasattr(ds, "__iter__") and not isinstance(ds, list):
             ds = list(ds)
@@ -28,7 +46,19 @@ class VLMDatasetAlpaca(Dataset):
         dummy_image = Image.new("RGB", (224, 224), color=(127, 127, 127))
 
         for i, item in enumerate(ds):
-            instr = item.get("instruction") or item.get("instructions") or item.get("input") or item.get("text")
+            # Probe common text/instruction fields across varied datasets
+            instr = (
+                item.get("instruction")
+                or item.get("instructions")
+                or item.get("prompt")
+                or item.get("input")
+                or item.get("question")
+                or item.get("title")
+                or item.get("abstract")
+                or item.get("body")
+                or item.get("utterance")
+                or item.get("text")
+            )
             if not instr:
                 continue
             instr = str(instr).replace("<image>", "").strip()
