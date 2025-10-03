@@ -156,8 +156,8 @@ def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_p
 
     plt.style.use('default')
     # Double font sizes
-    base_fs = plt.rcParams.get('font.size', 10)
-    fs = base_fs * 2
+    base_fs = plt.rcParams.get('font.size', 12)
+    fs = plt.rcParams.get('font.size', 18)
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     
     # Get unique datasets
@@ -173,14 +173,17 @@ def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_p
         # Determine if this dataset should be benign (0) or malicious (1)
         expected_label = int(labels[0]) if labels.size > 0 else 0
         dataset_type = "Benign" if expected_label == 0 else "Malicious"
+        # Legend wants: DatasetName(Property). If the name already carries a property in parentheses,
+        # keep it as-is to avoid duplication.
+        legend_label = dataset if "(" in str(dataset) else f"{dataset} ({dataset_type})"
         
-        ax1.hist(scores, bins=30, alpha=0.7, label=f"{dataset}", 
+        ax1.hist(scores, bins=30, alpha=0.7, label=legend_label, 
                 color=colors[i % len(colors)], density=True)
     
     ax1.set_xlabel('Reconstruction Error Score', fontsize=fs)
     ax1.set_ylabel('Density', fontsize=fs)
     ax1.set_title('Score Distribution Comparison Across Datasets', fontsize=fs)
-    ax1.legend(fontsize=fs)
+    ax1.legend(fontsize=base_fs)
     ax1.tick_params(axis='both', labelsize=fs)
     ax1.grid(True, alpha=0.3)
     
@@ -198,7 +201,12 @@ def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_p
         dataset_type = "Benign" if expected_label == 0 else "Malicious"
         
         box_data.append(scores)
-        box_labels.append(f"{dataset}")
+        # For x-axis of the second plot, show only dataset name (no property) and keep horizontal
+        ds_name_only = str(dataset)
+        if "(" in ds_name_only and ")" in ds_name_only:
+            # strip trailing parenthetical
+            ds_name_only = ds_name_only.split("(")[0].strip()
+        box_labels.append(ds_name_only)
         box_colors.append(colors[i % len(colors)])
     
     bp = ax2.boxplot(box_data, labels=box_labels, patch_artist=True)
@@ -209,7 +217,7 @@ def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_p
     ax2.set_ylabel('Reconstruction Error Score', fontsize=fs)
     ax2.set_title('Score Distribution Box Plot', fontsize=fs)
     ax2.grid(True, alpha=0.3)
-    plt.xticks(rotation=45, fontsize=fs)
+    plt.xticks(rotation=0, fontsize=fs)
     ax2.tick_params(axis='both', labelsize=fs)
     
     plt.tight_layout()
@@ -234,9 +242,17 @@ def print_experiment_configuration(experiment_name, train_samples, val_samples, 
 # -------------------------
 # Evaluation
 # -------------------------
-def evaluate_autoencoder_combined(dataloaders, concept_embeddings, autoencoder, device, concept_frequency_total):
+def evaluate_autoencoder_combined(
+    dataloaders,
+    concept_embeddings,
+    autoencoder,
+    device,
+    concept_frequency_total,
+    adapt_embeddings=True,
+):
     autoencoder.eval()
-    concept_embeddings = concept_embeddings.to(device)
+    # Clone locally to avoid unintended in-place mutation unless caller uses the returned value
+    concept_embeddings = concept_embeddings.clone().to(device)
 
     all_labels, all_scores = [], []
     modified_batches, total_inputs, total_time = [], 0, 0.0
@@ -261,9 +277,10 @@ def evaluate_autoencoder_combined(dataloaders, concept_embeddings, autoencoder, 
                 sim_txt = text_embedding @ concept_embeddings[:, 768:].T
                 attention_features = torch.cat((sim_txt, sim_img), dim=-1)
 
-                concept_embeddings, concept_frequency_total = update_concept_embeddings(
-                    concept_embeddings, concept_frequency_total, text_embedding, image_embedding, 0.0004, device=device
-                )
+                if adapt_embeddings:
+                    concept_embeddings, concept_frequency_total = update_concept_embeddings(
+                        concept_embeddings, concept_frequency_total, text_embedding, image_embedding, 0.0004, device=device
+                    )
 
                 recon = autoencoder(attention_features)
                 recon_err = torch.mean((recon - attention_features) ** 2, dim=-1)
@@ -310,6 +327,7 @@ def evaluate_autoencoder_combined(dataloaders, concept_embeddings, autoencoder, 
         "Recall": recall,
         "Average Processing Time per Input": avg_time,
         "Modified Batches": modified_batches,
+        "Concept Embeddings": concept_embeddings.detach().clone(),
     }
 
 
@@ -537,6 +555,7 @@ if __name__ == "__main__":
         autoencoder,
         device,
         concept_frequency_total_exp1,
+        adapt_embeddings=False,
     )
     print(f"\nResults:")
     print(f"   AUROC: {results_original['AUROC']:.4f}, AUPR: {results_original['AUPR']:.4f}")
@@ -564,9 +583,10 @@ if __name__ == "__main__":
                 _, _, text_embedding, image_embedding, _, _ = memory_network.forward(
                     text_input_ids=input_ids, text_attention_mask=attention_mask, image_pixel_values=pixel_values
                 )
-                # Use experiment-1 concept embeddings for consistency
-                sim_img = image_embedding @ concept_embeddings_exp1[:, :768].T
-                sim_txt = text_embedding @ concept_embeddings_exp1[:, 768:].T
+                # Use the exact embeddings from the evaluation (no adaptation)
+                ce_eval = results_original["Concept Embeddings"]
+                sim_img = image_embedding @ ce_eval[:, :768].T
+                sim_txt = text_embedding @ ce_eval[:, 768:].T
                 attention_features = torch.cat((sim_txt, sim_img), dim=-1)
                 recon = autoencoder(attention_features)
                 recon_err = torch.mean((recon - attention_features) ** 2, dim=-1)
@@ -575,6 +595,35 @@ if __name__ == "__main__":
                 all_scores_orig.extend(scores_np)
                 all_labels_orig.extend([expected_label] * len(scores_np))
                 dataset_names_orig.extend([dataset_name] * len(scores_np))
+
+    # -------------------------
+    # Diagnostics for figure vs metrics
+    # -------------------------
+    try:
+        from sklearn.metrics import roc_auc_score
+        import numpy as np
+        y_true_plot = np.array(all_labels_orig)
+        y_score_plot = np.array(all_scores_orig)
+        if y_true_plot.size > 0:
+            auroc_plot = roc_auc_score(y_true_plot, y_score_plot)
+            print(f"[Diagnostics] AUROC from plot arrays: {auroc_plot:.6f}")
+            # Percentile overlap check
+            benign_scores = y_score_plot[y_true_plot == 0]
+            malicious_scores = y_score_plot[y_true_plot == 1]
+            if benign_scores.size > 0 and malicious_scores.size > 0:
+                q_b = np.quantile(benign_scores, [0.5/100, 0.5, 99.5/100])
+                q_m = np.quantile(malicious_scores, [0.5/100, 0.5, 99.5/100])
+                print(
+                    f"[Diagnostics] Benign percentiles (0.5%, 50%, 99.5%): {q_b[0]:.4f}, {q_b[1]:.4f}, {q_b[2]:.4f}"
+                )
+                print(
+                    f"[Diagnostics] Malicious percentiles (0.5%, 50%, 99.5%): {q_m[0]:.4f}, {q_m[1]:.4f}, {q_m[2]:.4f}"
+                )
+                print(
+                    f"[Diagnostics] Benign max vs Malicious min: {benign_scores.max():.4f} vs {malicious_scores.min():.4f}"
+                )
+    except Exception as e:
+        print(f"[Diagnostics] Error computing diagnostics: {e}")
 
     timestamp_orig = datetime.now().strftime("%Y%m%d_%H%M%S")
     pdf_path_orig = f"jaildam_score_distribution_original_{timestamp_orig}.pdf"
@@ -605,6 +654,7 @@ if __name__ == "__main__":
             autoencoder,
             device,
             concept_frequency_total_exp2,
+            adapt_embeddings=False,
         )
         print(f"\nResults:")
         print(f"   AUROC: {results_all['AUROC']:.4f}, AUPR: {results_all['AUPR']:.4f}")
@@ -643,9 +693,10 @@ if __name__ == "__main__":
                         text_input_ids=input_ids, text_attention_mask=attention_mask, image_pixel_values=pixel_values
                     )
                     
-                    # Use experiment-2 concept embeddings for consistency
-                    sim_img = image_embedding @ concept_embeddings_exp2[:, :768].T
-                    sim_txt = text_embedding @ concept_embeddings_exp2[:, 768:].T
+                    # Use the exact embeddings from the evaluation (no adaptation)
+                    ce_eval2 = results_all["Concept Embeddings"]
+                    sim_img = image_embedding @ ce_eval2[:, :768].T
+                    sim_txt = text_embedding @ ce_eval2[:, 768:].T
                     attention_features = torch.cat((sim_txt, sim_img), dim=-1)
                     
                     recon = autoencoder(attention_features)
