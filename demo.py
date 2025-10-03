@@ -18,6 +18,9 @@ from transformers import (
     AutoProcessor,
     AutoModelForZeroShotImageClassification,
 )
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from datetime import datetime
 
 # External modules provided by your environment
 from UnsafeVLMDataset_28k import main as main_unsafe_28k
@@ -25,6 +28,7 @@ from UnsafeVLMDataset_MMsafety import main as main_unsafe_mmsafety
 from UnsafeVLMDataset_fig_step import main as main_unsafe_fig_step
 from VLMDataset_mmvet import main as main_safe_mmvet
 from VLMDataset_medical_vqa import main as main_safe_medical_vqa
+from VLMDataset_alpaca import main as main_safe_alpaca
 from generate_dataloader import main as generate_dataloader
 from memory_network import MemoryNetwork
 
@@ -141,6 +145,88 @@ def update_concept_embeddings(
 
 
 # -------------------------
+# Visualization Functions
+# -------------------------
+def create_score_distribution_plot(all_scores, all_labels, dataset_names, save_path="score_distribution.pdf"):
+    """Create a PDF visualization of score distributions for each dataset"""
+    # Ensure numpy arrays for correct boolean masking behavior
+    all_scores = np.asarray(all_scores)
+    all_labels = np.asarray(all_labels)
+    dataset_names = np.asarray(dataset_names)
+
+    plt.style.use('default')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    
+    # Get unique datasets
+    unique_datasets = np.unique(dataset_names)
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+    
+    # Plot 1: Histogram comparison
+    for i, dataset in enumerate(unique_datasets):
+        mask = dataset_names == dataset
+        scores = all_scores[mask]
+        labels = all_labels[mask]
+        
+        # Determine if this dataset should be benign (0) or malicious (1)
+        expected_label = int(labels[0]) if labels.size > 0 else 0
+        dataset_type = "Benign" if expected_label == 0 else "Malicious"
+        
+        ax1.hist(scores, bins=30, alpha=0.7, label=f"{dataset}", 
+                color=colors[i % len(colors)], density=True)
+    
+    ax1.set_xlabel('Reconstruction Error Score')
+    ax1.set_ylabel('Density')
+    ax1.set_title('Score Distribution Comparison Across Datasets')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Box plot comparison
+    box_data = []
+    box_labels = []
+    box_colors = []
+    
+    for i, dataset in enumerate(unique_datasets):
+        mask = dataset_names == dataset
+        scores = all_scores[mask]
+        labels = all_labels[mask]
+        
+        expected_label = int(labels[0]) if labels.size > 0 else 0
+        dataset_type = "Benign" if expected_label == 0 else "Malicious"
+        
+        box_data.append(scores)
+        box_labels.append(f"{dataset}")
+        box_colors.append(colors[i % len(colors)])
+    
+    bp = ax2.boxplot(box_data, labels=box_labels, patch_artist=True)
+    for patch, color in zip(bp['boxes'], box_colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+    
+    ax2.set_ylabel('Reconstruction Error Score')
+    ax2.set_title('Score Distribution Box Plot')
+    ax2.grid(True, alpha=0.3)
+    plt.xticks(rotation=45)
+    
+    plt.tight_layout()
+    plt.savefig(save_path, format='pdf', bbox_inches='tight', dpi=300)
+    plt.close()
+    print(f"Score distribution plot saved to: {save_path}")
+
+def print_experiment_configuration(experiment_name, train_samples, val_samples, test_samples_info, description):
+    """Print detailed experiment configuration"""
+    print(f"\n{'='*80}")
+    print(f"EXPERIMENT: {experiment_name}")
+    print(f"{'='*80}")
+    print(f"Description: {description}")
+    print(f"\nDataset Configuration:")
+    print(f"  Training: {train_samples} samples")
+    print(f"  Validation: {val_samples} samples")
+    print(f"  Testing:")
+    for test_name, test_count, test_type in test_samples_info:
+        print(f"    - {test_name}: {test_count} samples ({test_type})")
+    print(f"{'='*80}")
+
+# -------------------------
 # Evaluation
 # -------------------------
 def evaluate_autoencoder_combined(dataloaders, concept_embeddings, autoencoder, device, concept_frequency_total):
@@ -236,16 +322,20 @@ if __name__ == "__main__":
     unsafe_dataset_name = "UnsafeVLMDataset_MMsafety"
     safe_dataset_name = "VLMDataset_mmvet"
     test_benign_name = "VLMDataset_medical_vqa"  # VQA-RAD for unseen benign testing
-    max_test_samples = 1000  # Balanced test set size
+    max_test_samples = 500  # Cap VQA-RAD to 500
 
     unsafe_dataset, unsafe_dataloader, safe_dataset, safe_dataloader, test_benign_dataset, test_benign_dataloader = load_selected_datasets(
         unsafe_dataset_name, safe_dataset_name, ds_model, ds_processor, test_benign_name, max_test_samples
     )
+    # Load additional text-only benign instructions dataset (instruction tuning style)
+    text_only_max = 500
+    text_only_dataset, text_only_dataloader = main_safe_alpaca(ds_model, ds_processor, max_samples=text_only_max)
     
     print(f"Loaded {unsafe_dataset_name} with {len(unsafe_dataloader.dataset)} samples.")
     print(f"Loaded {safe_dataset_name} with {len(safe_dataloader.dataset)} samples.")
     if test_benign_dataset and test_benign_dataloader:
         print(f"Loaded {test_benign_name} with {len(test_benign_dataloader.dataset)} samples for unseen benign testing.")
+    print(f"Loaded Text-Only Instructions with {len(text_only_dataloader.dataset)} samples for unseen benign testing.")
 
     samples_per_category = 100
     num_categories = 13
@@ -412,35 +502,216 @@ if __name__ == "__main__":
         print("=" * 60)
 
     # Evaluate on multiple test sets
-    print("\n" + "="*60)
+    print("\n" + "="*80)
     print("EVALUATION RESULTS")
-    print("="*60)
+    print("="*80)
     
     # Test 1: Validation + Unsafe (original approach)
-    print("\n1. Validation + Unsafe (Original Approach):")
+    print_experiment_configuration(
+        experiment_name="Original Jailbreak Detection",
+        train_samples=len(train_dataset),
+        val_samples=len(val_dataset),
+        test_samples_info=[
+            ("Validation (MM-Vet)", len(val_dataset), "Benign"),
+            ("Unsafe (MMSafety)", len(unsafe_only), "Malicious")
+        ],
+        description="Baseline experiment using the original JailDAM approach: train on safe data, test on safe validation + unsafe data"
+    )
+    
     combined_dataloaders_original = [val_dataloader, ood_dataloader]
     results_original = evaluate_autoencoder_combined(combined_dataloaders_original, concept_embeddings, autoencoder, device, concept_frequency_total)
+    print(f"\nResults:")
     print(f"   AUROC: {results_original['AUROC']:.4f}, AUPR: {results_original['AUPR']:.4f}")
     print(f"   F1 Score: {results_original['F1 Score']:.4f}, Precision: {results_original['Precision']:.4f}, Recall: {results_original['Recall']:.4f}")
     
-    # Test 2: Validation + Unseen Benign (VQA-RAD) - Distribution Shift Test
+    # Generate score distribution plot for the first (original) experiment
+    datasets_info_original = [
+        ("Validation (MM-Vet)", val_dataloader, 0),
+        ("Unsafe (MMSafety)", ood_dataloader, 1)
+    ]
+    all_scores_orig = []
+    all_labels_orig = []
+    dataset_names_orig = []
+    
+    autoencoder.eval()
+    with torch.no_grad():
+        for dataset_name, dataloader, expected_label in datasets_info_original:
+            for batch in dataloader:
+                pixel_values = batch["pixel_values"].to(device)
+                input_ids = batch["input_ids"].to(device)
+                attention_mask = batch["attention_mask"].to(device)
+                
+                _, _, text_embedding, image_embedding, _, _ = memory_network.forward(
+                    text_input_ids=input_ids, text_attention_mask=attention_mask, image_pixel_values=pixel_values
+                )
+                sim_img = image_embedding @ concept_embeddings[:, :768].T
+                sim_txt = text_embedding @ concept_embeddings[:, 768:].T
+                attention_features = torch.cat((sim_txt, sim_img), dim=-1)
+                recon = autoencoder(attention_features)
+                recon_err = torch.mean((recon - attention_features) ** 2, dim=-1)
+                
+                scores_np = recon_err.cpu().numpy()
+                all_scores_orig.extend(scores_np)
+                all_labels_orig.extend([expected_label] * len(scores_np))
+                dataset_names_orig.extend([dataset_name] * len(scores_np))
+
+    timestamp_orig = datetime.now().strftime("%Y%m%d_%H%M%S")
+    pdf_path_orig = f"jaildam_score_distribution_original_{timestamp_orig}.pdf"
+    create_score_distribution_plot(np.array(all_scores_orig), np.array(all_labels_orig), np.array(dataset_names_orig), pdf_path_orig)
+    
+    # Test 2: All test sets combined with detailed analysis
     if test_benign_dataloader:
-        print("\n2. Validation + Unseen Benign (VQA-RAD) - Distribution Shift Test:")
-        combined_dataloaders_shift = [val_dataloader, test_benign_dataloader]
-        results_shift = evaluate_autoencoder_combined(combined_dataloaders_shift, concept_embeddings, autoencoder, device, concept_frequency_total)
-        print(f"   AUROC: {results_shift['AUROC']:.4f}, AUPR: {results_shift['AUPR']:.4f}")
-        print(f"   F1 Score: {results_shift['F1 Score']:.4f}, Precision: {results_shift['Precision']:.4f}, Recall: {results_shift['Recall']:.4f}")
+        print_experiment_configuration(
+            experiment_name="Robust Jailbreak Detection with Distribution Shift",
+            train_samples=len(train_dataset),
+            val_samples=len(val_dataset),
+            test_samples_info=[
+                ("Validation (MM-Vet)", len(val_dataset), "Benign (Seen)"),
+                ("Unsafe (MMSafety)", len(unsafe_only), "Malicious (Seen)"),
+                ("VQA-RAD (Medical)", len(test_benign_dataloader.dataset), "Benign (Unseen)"),
+                ("Text-Only Instructions", len(text_only_dataloader.dataset), "Benign (Unseen)")
+            ],
+            description="Robustness test: train on safe data, test on safe validation + unsafe data + unseen benign data from different domain (medical) to test distribution shift robustness"
+        )
         
-        # Test 3: All test sets combined
-        print("\n3. All Test Sets Combined (Validation + Unsafe + Unseen Benign):")
-        combined_dataloaders_all = [val_dataloader, ood_dataloader, test_benign_dataloader]
+        combined_dataloaders_all = [val_dataloader, ood_dataloader, test_benign_dataloader, text_only_dataloader]
         results_all = evaluate_autoencoder_combined(combined_dataloaders_all, concept_embeddings, autoencoder, device, concept_frequency_total)
+        print(f"\nResults:")
         print(f"   AUROC: {results_all['AUROC']:.4f}, AUPR: {results_all['AUPR']:.4f}")
         print(f"   F1 Score: {results_all['F1 Score']:.4f}, Precision: {results_all['Precision']:.4f}, Recall: {results_all['Recall']:.4f}")
+        
+        # Detailed per-dataset analysis
+        print("\n" + "="*80)
+        print("DETAILED PER-DATASET ANALYSIS")
+        print("="*80)
+        
+        # Analyze each dataset separately
+        datasets_info = [
+            ("Validation (Safe)", val_dataloader, 0),
+            ("Unsafe (Malicious)", ood_dataloader, 1), 
+            ("VQA-RAD (Unseen Benign)", test_benign_dataloader, 0),
+            ("Text-Only Instructions (Unseen Benign)", text_only_dataloader, 0)
+        ]
+        
+        all_scores = []
+        all_labels = []
+        dataset_names = []
+        
+        for dataset_name, dataloader, expected_label in datasets_info:
+            print(f"\n{dataset_name}:")
+            scores = []
+            labels = []
+            
+            autoencoder.eval()
+            with torch.no_grad():
+                for batch in dataloader:
+                    pixel_values = batch["pixel_values"].to(device)
+                    input_ids = batch["input_ids"].to(device)
+                    attention_mask = batch["attention_mask"].to(device)
+                    
+                    _, _, text_embedding, image_embedding, _, _ = memory_network.forward(
+                        text_input_ids=input_ids, text_attention_mask=attention_mask, image_pixel_values=pixel_values
+                    )
+                    
+                    sim_img = image_embedding @ concept_embeddings[:, :768].T
+                    sim_txt = text_embedding @ concept_embeddings[:, 768:].T
+                    attention_features = torch.cat((sim_txt, sim_img), dim=-1)
+                    
+                    recon = autoencoder(attention_features)
+                    recon_err = torch.mean((recon - attention_features) ** 2, dim=-1)
+                    
+                    scores.extend(recon_err.cpu().numpy())
+                    labels.extend([expected_label] * len(recon_err))
+            
+            scores = np.array(scores)
+            labels = np.array(labels)
+            
+            all_scores.extend(scores)
+            all_labels.extend(labels)
+            dataset_names.extend([dataset_name] * len(scores))
+            
+            print(f"  Samples: {len(scores)}")
+            print(f"  Mean Score: {scores.mean():.4f}")
+            print(f"  Std Score: {scores.std():.4f}")
+            print(f"  Min Score: {scores.min():.4f}")
+            print(f"  Max Score: {scores.max():.4f}")
+            print(f"  Median Score: {np.median(scores):.4f}")
+            
+            # Score distribution bins
+            print(f"  Score Distribution:")
+            bins = np.linspace(scores.min(), scores.max(), 11)
+            hist, _ = np.histogram(scores, bins=bins)
+            for i in range(len(hist)):
+                bin_start = bins[i]
+                bin_end = bins[i+1]
+                count = hist[i]
+                bar = "█" * min(count, 50)  # Limit bar length
+                print(f"    [{bin_start:.2f}, {bin_end:.2f}): {count:3d} {bar}")
+        
+        # Create PDF visualization
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pdf_path = f"jaildam_score_distribution_{timestamp}.pdf"
+        create_score_distribution_plot(all_scores, all_labels, dataset_names, pdf_path)
+        
+        # Overall confusion analysis
+        print(f"\n" + "="*80)
+        print("CONFUSION ANALYSIS")
+        print("="*80)
+        
+        all_scores = np.array(all_scores)
+        all_labels = np.array(all_labels)
+        dataset_names = np.array(dataset_names)
+        
+        # Find optimal threshold
+        best_f1, best_threshold = 0.0, 0.0
+        for th in np.linspace(all_scores.min(), all_scores.max(), 100):
+            preds = (all_scores >= th).astype(int)
+            precision, recall, f1, _ = precision_recall_fscore_support(all_labels, preds, average="binary", zero_division=1)
+            if f1 > best_f1:
+                best_f1, best_threshold = f1, th
+        
+        print(f"Optimal Threshold: {best_threshold:.4f}")
+        print(f"Best F1 Score: {best_f1:.4f}")
+        
+        # Per-dataset performance at optimal threshold
+        for dataset_name, dataloader, expected_label in datasets_info:
+            dataset_scores = all_scores[dataset_names == dataset_name]
+            dataset_labels = all_labels[dataset_names == dataset_name]
+            dataset_preds = (dataset_scores >= best_threshold).astype(int)
+            
+            correct = (dataset_preds == dataset_labels).sum()
+            total = len(dataset_preds)
+            accuracy = correct / total
+            
+            print(f"\n{dataset_name} at threshold {best_threshold:.4f}:")
+            print(f"  Accuracy: {accuracy:.4f} ({correct}/{total})")
+            print(f"  Predicted as Malicious: {(dataset_preds == 1).sum()}/{total}")
+            print(f"  Predicted as Benign: {(dataset_preds == 0).sum()}/{total}")
+            
+            if expected_label == 0:  # Should be benign
+                false_positive_rate = (dataset_preds == 1).sum() / total
+                print(f"  False Positive Rate: {false_positive_rate:.4f}")
+            else:  # Should be malicious
+                true_positive_rate = (dataset_preds == 1).sum() / total
+                print(f"  True Positive Rate: {true_positive_rate:.4f}")
     else:
-        print("\n2. VQA-RAD dataset not available, skipping distribution shift test.")
+        print("\n2. VQA-RAD dataset not available, skipping comprehensive analysis.")
     
     print(f"\nAverage Processing Time per Input: {results_original['Average Processing Time per Input']:.6f} seconds")
+    
+    # Final Summary
+    print("\n" + "="*80)
+    print("EXPERIMENT SUMMARY")
+    print("="*80)
+    print("This evaluation tested the JailDAM framework's robustness to distribution shift:")
+    print("1. Original approach: Train on safe data, test on safe + unsafe data")
+    print("2. Robustness test: Train on safe data, test on safe + unsafe + unseen benign data")
+    print("\nKey insights:")
+    print("- The method's ability to distinguish between benign and malicious samples")
+    print("- How distribution shift affects detection performance")
+    print("- Whether unseen benign data is misclassified as malicious")
+    print("- Score distributions reveal decision-making patterns")
+    print("="*80)
 
 
 # In[ ]:
